@@ -12,7 +12,8 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.1.2",
   "com.typesafe.akka" %% "akka-testkit" % "2.3.9" % "test",
   "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-  "org.mockito" % "mockito-all" % "1.9.5" % "test"
+  "org.mockito" % "mockito-all" % "1.9.5" % "test",
+  "com.typesafe.play" %% "play-json" % "2.3.8" % "test"
 )
 
 

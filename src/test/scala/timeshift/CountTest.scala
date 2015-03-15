@@ -2,7 +2,7 @@ package timeshift
 
 import java.util.Date
 
-import com.sksamuel.elastic4s.source.DocumentMap
+import com.sksamuel.elastic4s.source.{DocumentSource, DocumentMap}
 import org.scalatest.FlatSpec
 import org.scalatest.mock.MockitoSugar
 import com.sksamuel.elastic4s.ElasticDsl._
@@ -33,8 +33,16 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
       )
   }.await
 
+  case class Pub(name: String) extends DocumentSource {
+    import play.api.libs.json.Json
+
+    implicit val pubWrites = Json.writes[Pub]
+
+    override def json: String = Json.stringify(Json.toJson(this))
+  }
+
   client.execute {
-    index into "london/pubs" fields "name" -> "blue bell"
+    index into "london/pubs" doc Pub("blue bell")
   }.await
 
   refresh("london")
@@ -54,8 +62,15 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
     assert(2 === resp.getCount)
   }
 
+  "an all search request" should "return all the document searched" in {
+    val resp = client.execute {
+      search in "london"
+    }.await
+    logger.info(s">> RESP: $resp")
+    assert(3 === resp.getHits.getTotalHits)
+  }
+
   "a search request" should "return the document searched for the correct type" in {
-    val to = new Date().getTime
     val resp = client.execute {
       search in "london" types  "landmarks" rawQuery(
         """
