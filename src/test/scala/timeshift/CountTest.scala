@@ -1,12 +1,13 @@
 package timeshift
 
-import java.util.Date
+import java.util.{UUID, Date}
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sksamuel.elastic4s.source.{JacksonSource, DocumentSource, DocumentMap}
 import org.scalatest.FlatSpec
 import org.scalatest.mock.MockitoSugar
 import com.sksamuel.elastic4s.ElasticDsl._
+import timeshift.entity.TimedDocument
 
 /**
  * @author Riccardo Merolla
@@ -18,8 +19,20 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
 
   val oldDate = "2014-01-01"
 
-  case class Landmarks(name: String, timestamp: Date) extends DocumentMap {
-    override def map: Map[String, Any] = Map("name" -> name, "timestamp" -> timestamp)
+  case class Landmarks(name: String, timestamp: Date) extends DocumentMap with TimedDocument {
+    override def map: Map[String, Any] =
+      Map("uuid" -> uuid, "name" -> name, "timestamp" -> timestamp, "data-in" -> dataIn, "doc" -> source)
+
+    override def uuid: UUID = UUID.randomUUID()
+
+    override def source: Any =
+      s"""
+        |{"name": "$name", "timestamp": "$timestamp"}
+      """.stripMargin
+
+    override def dataIn: Date = new Date
+
+    override def dataOut: Date = ???
   }
   val hampton = Landmarks("hampton court palace", now)
 
