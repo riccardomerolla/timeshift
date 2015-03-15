@@ -2,7 +2,8 @@ package timeshift
 
 import java.util.Date
 
-import com.sksamuel.elastic4s.source.{DocumentSource, DocumentMap}
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.sksamuel.elastic4s.source.{JacksonSource, DocumentSource, DocumentMap}
 import org.scalatest.FlatSpec
 import org.scalatest.mock.MockitoSugar
 import com.sksamuel.elastic4s.ElasticDsl._
@@ -33,6 +34,17 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
       )
   }.await
 
+  val jsonPub =
+    """
+      |{"name":"bull dogs"}
+    """.stripMargin
+
+  val mapper = new ObjectMapper
+
+  client.execute {
+    index into "london" -> "pubs" doc JacksonSource(mapper.readTree(jsonPub))
+  }.await
+
   case class Pub(name: String) extends DocumentSource {
     import play.api.libs.json.Json
 
@@ -46,13 +58,13 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
   }.await
 
   refresh("london")
-  blockUntilCount(3, "london")
+  blockUntilCount(4, "london")
 
   "a count request" should "return total count when no query is specified" in {
     val resp = client.execute {
       count from "london"
     }.await
-    assert(3 === resp.getCount)
+    assert(4 === resp.getCount)
   }
 
   "a count request" should "return the document count for the correct type" in {
@@ -67,7 +79,7 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
       search in "london"
     }.await
     logger.info(s">> RESP: $resp")
-    assert(3 === resp.getHits.getTotalHits)
+    assert(4 === resp.getHits.getTotalHits)
   }
 
   "a search request" should "return the document searched for the correct type" in {
