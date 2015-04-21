@@ -1,19 +1,21 @@
 package timeshift
 
-import java.util.{UUID, Date}
+import java.util.{Date, UUID}
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.sksamuel.elastic4s.source.{JacksonSource, DocumentSource, DocumentMap}
-import org.scalatest.FlatSpec
-import org.scalatest.mock.MockitoSugar
 import com.sksamuel.elastic4s.ElasticDsl._
+import com.sksamuel.elastic4s.source.{DocumentMap, DocumentSource, JacksonSource}
+import org.elasticsearch.search.sort.{SortBuilders, SortOrder}
+import org.scalatest.mock.MockitoSugar
+import org.scalatest.{FlatSpec, Matchers}
+import play.api.libs.json.{JsObject, JsString}
 import timeshift.entity.TimedDocument
 
 /**
  * @author Riccardo Merolla
  *         Created on 15/03/15.
  */
-class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
+class CountTest extends FlatSpec with MockitoSugar with ElasticSugar with Matchers {
 
   val now = new Date
 
@@ -23,7 +25,9 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
     override def map: Map[String, Any] =
       Map("uuid" -> uuid, "name" -> name, "timestamp" -> timestamp, "data-in" -> dataIn, "doc" -> source)
 
-    override def uuid: UUID = UUID.randomUUID()
+    val uuidValue: UUID = UUID.randomUUID()
+
+    override def uuid: UUID = uuidValue
 
     override def source: Any =
       s"""
@@ -43,6 +47,7 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
   client.execute {
     index into "london/landmarks" fields (
       "name" -> "tower of london",
+      "uuid" -> hampton.uuid,
       "timestamp" -> oldDate
       )
   }.await
@@ -63,7 +68,24 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
 
     implicit val pubWrites = Json.writes[Pub]
 
-    override def json: String = Json.stringify(Json.toJson(this))
+    //override def json: String = Json.stringify(Json.toJson(this).as[JsObject] + ("test", JsString("testString")))
+    override def json: String = Json.stringify(Json.parse(s"""
+        {
+          "name" : "$name",
+          "location" : {
+            "lat" : 51.235685,
+            "long" : -1.309197
+          },
+          "residents" : [ {
+            "name" : "Fiver",
+            "age" : 4,
+            "role" : null
+          }, {
+            "name" : "Bigwig",
+            "age" : 6,
+            "role" : "Owsla"
+          } ]
+        }""").as[JsObject] + ("test", JsString("testString")))
   }
 
   client.execute {
@@ -90,14 +112,12 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
   "an all search request" should "return all the document searched" in {
     val resp = client.execute {
       search in "london"
-    }.await
-    logger.info(s">> RESP: $resp")
-    assert(4 === resp.getHits.getTotalHits)
+    }.await.getHits.getTotalHits shouldBe 4
   }
 
   "a search request" should "return the document searched for the correct type" in {
     val resp = client.execute {
-      search in "london" types  "landmarks" rawQuery(
+      search in "london" types  "landmarks" rawQuery
         """
           |{
           |    "range" : {
@@ -108,10 +128,43 @@ class CountTest extends FlatSpec with MockitoSugar with ElasticSugar {
           |        }
           |    }
           |}
-      """.stripMargin)
+      """.stripMargin
+    }.await
+    //logger.info(s">> RESP: $resp")
+    assert(2 === resp.getHits.getTotalHits)
+  }
+
+  "a match query" should
+    "query uuid field" in {
+      val resp = client.execute {
+        search in "london" types "landmarks" query ("uuid:" + hampton.uuid)
+      }.await
+      //logger.info(s">> RESP: $resp")
+      assert(2 === resp.getHits.totalHits)
+  }
+
+  "a current document search query" should
+    "return the current document" in {
+    val uuidQuery = hampton.uuid
+    val resp = client.execute {
+      search in "london" types "landmarks" rawQuery
+        s"""
+          |{
+          |   "match" : {
+          |        "uuid" : "$uuidQuery"
+          |    },
+          |    "range" : {
+          |        "timestamp" : {
+          |            "lte": "now",
+          |            "time_zone": "+1:00"
+          |        }
+          |    }
+          |}
+        """.stripMargin sort2
+        SortBuilders.fieldSort("timestamp").order(SortOrder.DESC) limit 1
     }.await
     logger.info(s">> RESP: $resp")
-    assert(2 === resp.getHits.getTotalHits)
+    assert(1 === resp.getHits.hits().length)
   }
 
 }
